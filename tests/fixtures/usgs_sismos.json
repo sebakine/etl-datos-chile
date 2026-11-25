@@ -1,0 +1,261 @@
+{
+ "type": "FeatureCollection",
+ "metadata": {
+  "generated": 1795641967000,
+  "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2026-11-18&endtime=2026-11-25&minlatitude=-56&maxlatitude=-17.5&minlongitude=-76&maxlongitude=-66&minmagnitude=2.5&orderby=time-asc",
+  "title": "USGS Earthquakes",
+  "status": 200,
+  "api": "2.8.4",
+  "count": 6
+ },
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "mag": 4.1,
+    "place": "31 km S of Coquimbo, Chile",
+    "time": 1794984349875,
+    "updated": 1795593676040,
+    "tz": null,
+    "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000tyyf",
+    "detail": "https://earthquake.usgs.gov/fdsnws/event/1/query?eventid=us7000tyyf&format=geojson",
+    "felt": null,
+    "cdi": null,
+    "mmi": null,
+    "alert": null,
+    "status": "reviewed",
+    "tsunami": 0,
+    "sig": 259,
+    "net": "us",
+    "code": "7000tyyf",
+    "ids": ",us7000tyyf,",
+    "sources": ",us,",
+    "types": ",origin,phase-data,",
+    "nst": 26,
+    "dmin": 0.332,
+    "rms": 0.69,
+    "gap": 99,
+    "magType": "mb",
+    "type": "earthquake",
+    "title": "M 4.1 - 31 km S of Coquimbo, Chile"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -71.3457,
+     -30.2387,
+     65.327
+    ]
+   },
+   "id": "us7000tyyf"
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "mag": 4.5,
+    "place": "20 km SSW of Ollagüe, Chile",
+    "time": 1795027613085,
+    "updated": 1795112255040,
+    "tz": null,
+    "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000tz33",
+    "detail": "https://earthquake.usgs.gov/fdsnws/event/1/query?eventid=us7000tz33&format=geojson",
+    "felt": null,
+    "cdi": null,
+    "mmi": null,
+    "alert": null,
+    "status": "reviewed",
+    "tsunami": 0,
+    "sig": 312,
+    "net": "us",
+    "code": "7000tz33",
+    "ids": ",us7000tz33,",
+    "sources": ",us,",
+    "types": ",origin,phase-data,",
+    "nst": 53,
+    "dmin": 0.959,
+    "rms": 0.76,
+    "gap": 61,
+    "magType": "mb",
+    "type": "earthquake",
+    "title": "M 4.5 - 20 km SSW of Ollagüe, Chile"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -68.2976,
+     -21.41,
+     129.419
+    ]
+   },
+   "id": "us7000tz33"
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "mag": 5.1,
+    "place": "99 km WSW of Illapel, Chile",
+    "time": 1795111786530,
+    "updated": 1795113746040,
+    "tz": null,
+    "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us6000uc1x",
+    "detail": "https://earthquake.usgs.gov/fdsnws/event/1/query?eventid=us6000uc1x&format=geojson",
+    "felt": null,
+    "cdi": null,
+    "mmi": null,
+    "alert": null,
+    "status": "reviewed",
+    "tsunami": 0,
+    "sig": 400,
+    "net": "us",
+    "code": "6000uc1x",
+    "ids": ",us6000uc1x,",
+    "sources": ",us,",
+    "types": ",moment-tensor,origin,phase-data,",
+    "nst": 49,
+    "dmin": 1.047,
+    "rms": 1.03,
+    "gap": 95,
+    "magType": "mww",
+    "type": "earthquake",
+    "title": "M 5.1 - 99 km WSW of Illapel, Chile"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -72.1843,
+     -31.8465,
+     10
+    ]
+   },
+   "id": "us6000uc1x"
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "mag": 4.8,
+    "place": "24 km ESE of Calingasta, Argentina",
+    "time": 1795143438070,
+    "updated": 1795219943662,
+    "tz": null,
+    "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us6000uc5s",
+    "detail": "https://earthquake.usgs.gov/fdsnws/event/1/query?eventid=us6000uc5s&format=geojson",
+    "felt": 4,
+    "cdi": 3.4,
+    "mmi": null,
+    "alert": null,
+    "status": "reviewed",
+    "tsunami": 0,
+    "sig": 356,
+    "net": "us",
+    "code": "6000uc5s",
+    "ids": ",us6000uc5s,",
+    "sources": ",us,",
+    "types": ",dyfi,origin,phase-data,",
+    "nst": 59,
+    "dmin": 0.457,
+    "rms": 0.9,
+    "gap": 56,
+    "magType": "mb",
+    "type": "earthquake",
+    "title": "M 4.8 - 24 km ESE of Calingasta, Argentina"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -69.1883,
+     -31.4302,
+     113.86
+    ]
+   },
+   "id": "us6000uc5s"
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "mag": 4.1,
+    "place": "31 km S of Coquimbo, Chile",
+    "time": 1794984349875,
+    "updated": 1795593676040,
+    "tz": null,
+    "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000tyyf",
+    "detail": "https://earthquake.usgs.gov/fdsnws/event/1/query?eventid=us7000tyyf&format=geojson",
+    "felt": null,
+    "cdi": null,
+    "mmi": null,
+    "alert": null,
+    "status": "reviewed",
+    "tsunami": 0,
+    "sig": 259,
+    "net": "us",
+    "code": "7000tyyf",
+    "ids": ",us7000tyyf,",
+    "sources": ",us,",
+    "types": ",origin,phase-data,",
+    "nst": 26,
+    "dmin": 0.332,
+    "rms": 0.69,
+    "gap": 99,
+    "magType": "mb",
+    "type": "quarry blast",
+    "title": "M 4.1 - 31 km S of Coquimbo, Chile"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -71.3457,
+     -30.2387,
+     65.327
+    ]
+   },
+   "id": "uu_blast1"
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "mag": null,
+    "place": "20 km SSW of Ollagüe, Chile",
+    "time": 1795027613085,
+    "updated": 1795112255040,
+    "tz": null,
+    "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000tz33",
+    "detail": "https://earthquake.usgs.gov/fdsnws/event/1/query?eventid=us7000tz33&format=geojson",
+    "felt": null,
+    "cdi": null,
+    "mmi": null,
+    "alert": null,
+    "status": "reviewed",
+    "tsunami": 0,
+    "sig": 312,
+    "net": "us",
+    "code": "7000tz33",
+    "ids": ",us7000tz33,",
+    "sources": ",us,",
+    "types": ",origin,phase-data,",
+    "nst": 53,
+    "dmin": 0.959,
+    "rms": 0.76,
+    "gap": 61,
+    "magType": "mb",
+    "type": "earthquake",
+    "title": "M 4.5 - 20 km SSW of Ollagüe, Chile"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -68.2976,
+     -21.41,
+     129.419
+    ]
+   },
+   "id": "us_sinmag"
+  }
+ ],
+ "bbox": [
+  -72.3842,
+  -31.8465,
+  10,
+  -66.519,
+  -21.1895,
+  209.784
+ ]
+}
