@@ -69,6 +69,13 @@ CHECKS: tuple[Check, ...] = (
         "La UF debe estar en un rango plausible.",
     ),
     Check(
+        "dolar_desactualizado",
+        "advertencia",
+        """SELECT 'dolar', max(fecha) FROM mart.indicadores_diarios WHERE dolar IS NOT NULL
+           HAVING max(fecha) < current_date - 5""",
+        "El dólar se publica cada día hábil; más de 5 días sin valor indica un problema.",
+    ),
+    Check(
         "datos_desactualizados",
         "advertencia",
         """SELECT 'sismos', max(ocurrido_en) FROM warehouse.fact_sismo

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from datetime import date, datetime
 from enum import StrEnum
 from typing import Annotated
@@ -93,8 +94,11 @@ def ejecutar(
     table = Table(title="Ejecución", title_justify="left")
     for col in ("Fuente", "Estado", "Extraídos", "Insertados", "Actualizados", "Rechazados"):
         table.add_column(col, justify="left" if col in {"Fuente", "Estado"} else "right")
+    colors = {"ok": "green", "parcial": "yellow", "error": "red"}
     for s in summaries:
-        estado = "[green]ok[/]" if s.estado == "ok" else f"[red]error[/] {s.error}"
+        estado = f"[{colors.get(s.estado, 'red')}]{s.estado}[/]" + (
+            f" {s.error}" if s.error else ""
+        )
         table.add_row(
             s.fuente, estado, str(s.extraidos), str(s.resultado.inserted),
             str(s.resultado.updated), str(s.rechazados),
@@ -102,8 +106,13 @@ def ejecutar(
     console.print(table)
     _print_checks(results)
 
+    for s in summaries:
+        if s.estado == "parcial" and os.environ.get("GITHUB_ACTIONS") == "true":
+            # Anotación visible en GitHub Actions sin marcar la corrida como fallida.
+            mensaje = (s.error or "").replace("\n", " ")
+            typer.echo(f"::warning title=Carga parcial de {s.fuente}::{mensaje}")
     failed_critical = [r for r in results if not r.ok and r.check.severidad == "critico"]
-    if any(s.estado != "ok" for s in summaries) or failed_critical:
+    if any(s.estado == "error" for s in summaries) or failed_critical:
         raise typer.Exit(1)
 
 

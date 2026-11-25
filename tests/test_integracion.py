@@ -99,7 +99,9 @@ def test_indicadores_incremental(conn: psycopg.Connection, settings: Settings) -
     ) == date(2025, 1, 6)
 
 
-def test_failed_run_rolls_back_and_is_logged(conn: psycopg.Connection, settings: Settings) -> None:
+def test_one_failing_indicator_does_not_lose_the_others(
+    conn: psycopg.Connection, settings: Settings
+) -> None:
     def broken(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/uf/2025"):
             return httpx.Response(404)
@@ -109,11 +111,28 @@ def test_failed_run_rolls_back_and_is_logged(conn: psycopg.Connection, settings:
         summary = pipeline.run_indicadores(
             conn, client, settings, desde=date(2025, 1, 1), today=date(2025, 1, 10)
         )
-    assert summary.estado == "error"
-    assert "404" in (summary.error or "")
-    # El dólar se alcanzó a procesar antes del error, pero no quedó nada a medias.
-    assert one(conn, "SELECT count(*) FROM warehouse.fact_indicador_diario") == 0
-    assert one(conn, "SELECT estado FROM etl.ejecuciones ORDER BY id DESC LIMIT 1") == "error"
+    assert summary.estado == "parcial"
+    assert "uf" in (summary.error or "")
+    assert summary.resultado.inserted == 3  # el dólar sí quedó cargado
+    assert one(conn, "SELECT count(*) FROM warehouse.fact_indicador_diario") == 3
+    # La marca de agua no avanza, para reintentar la UF en la próxima corrida.
+    assert one(conn, "SELECT count(*) FROM etl.marcas_de_agua WHERE fuente = 'mindicador'") == 0
+    assert one(conn, "SELECT estado FROM etl.ejecuciones ORDER BY id DESC LIMIT 1") == "parcial"
+
+
+def test_failed_source_rolls_back_and_is_logged(
+    conn: psycopg.Connection, settings: Settings
+) -> None:
+    with httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(400))) as client:
+        sismos = pipeline.run_sismos(conn, client, settings, desde=date(2026, 11, 1), now=NOW)
+        indicadores = pipeline.run_indicadores(
+            conn, client, settings, desde=date(2025, 1, 1), today=date(2025, 1, 10)
+        )
+    assert sismos.estado == indicadores.estado == "error"
+    assert sismos.resultado.inserted == 0
+    assert one(conn, "SELECT count(*) FROM warehouse.fact_sismo") == 0
+    assert one(conn, "SELECT count(*) FROM raw.respuestas_api") == 0
+    assert one(conn, "SELECT count(*) FROM etl.ejecuciones WHERE estado = 'error'") == 2
 
 
 def test_quality_checks(conn: psycopg.Connection, settings: Settings) -> None:
@@ -145,3 +164,37 @@ def test_cli_end_to_end(
     assert status.exit_code == 0, status.output
     assert "Sismos: 4" in status.output
     assert "etl-chile" in runner.invoke(cli.app, ["--version"]).output
+
+
+def test_cli_partial_load_warns_on_github(
+    conn: psycopg.Connection, monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    def broken(request: httpx.Request) -> httpx.Response:
+        if request.url.path.startswith("/api/uf/"):
+            return httpx.Response(404)
+        return api_handler()(request)
+
+    monkeypatch.setenv("DATABASE_URL", settings.database_url)
+    monkeypatch.setenv("ETL_INDICADORES", "dolar,uf")
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setattr(
+        cli, "make_client", lambda timeout: httpx.Client(transport=httpx.MockTransport(broken))
+    )
+    result = CliRunner().invoke(
+        cli.app, ["ejecutar", "--fuente", "indicadores", "--desde", "2025-01-01"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "::warning title=Carga parcial de mindicador::" in result.output
+
+
+def test_cli_fails_when_a_source_fails(
+    conn: psycopg.Connection, monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", settings.database_url)
+    monkeypatch.setattr(
+        cli,
+        "make_client",
+        lambda timeout: httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(400))),
+    )
+    result = CliRunner().invoke(cli.app, ["ejecutar", "--fuente", "sismos"])
+    assert result.exit_code == 1

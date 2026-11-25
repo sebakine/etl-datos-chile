@@ -89,6 +89,7 @@ def _tracked(
     except Exception as exc:
         summary.estado = "error"
         summary.error = f"{type(exc).__name__}: {exc}"
+        summary.resultado = load.LoadResult()  # la transacción se revirtió: nada quedó cargado
         log.exception("falló la carga de %s", fuente)
     _finish_run(conn, summary)
     return summary
@@ -147,7 +148,12 @@ def run_indicadores(
     desde: date | None = None,
     today: date | None = None,
 ) -> RunSummary:
-    """Carga indicadores por año. Sin ``desde`` parte desde el año de la marca de agua."""
+    """Carga indicadores por año. Sin ``desde`` parte desde el año de la marca de agua.
+
+    Cada indicador se carga en su propio savepoint: si mindicador.cl no responde
+    para uno, los demás se guardan igual y la ejecución queda como ``parcial``.
+    Si fallan todos, queda como ``error``.
+    """
     today = today or datetime.now(mindicador.SANTIAGO).date()
 
     def body(summary: RunSummary) -> None:
@@ -159,20 +165,36 @@ def run_indicadores(
         else:
             first_year = settings.start_date.year
         latest: date | None = None
+        failures: list[str] = []
         for codigo in settings.indicators:
-            for year in range(first_year, today.year + 1):
-                payload = mindicador.fetch_year(client, codigo, year)
-                load.save_raw(conn, FUENTE_INDICADORES, f"{codigo}/{year}", payload)
-                indicador, values, rejected = mindicador.parse(payload)
-                if desde is not None:
-                    values = [v for v in values if v.fecha >= desde]
-                summary.extraidos += len(values) + len(rejected)
-                summary.rechazados += len(rejected)
-                load.save_rejections(conn, summary.ejecucion_id, FUENTE_INDICADORES, rejected)
-                summary.resultado += load.load_indicador(conn, indicador, values)
-                if values:
-                    latest = max(latest or values[-1].fecha, values[-1].fecha)
-        if latest is not None:
+            try:
+                with conn.transaction():
+                    result, extracted, rejected_count, last = _load_indicator_years(
+                        conn,
+                        client,
+                        run_id=summary.ejecucion_id,
+                        codigo=codigo,
+                        first_year=first_year,
+                        last_year=today.year,
+                        desde=desde,
+                    )
+            except Exception as exc:
+                log.warning("no se pudo cargar %s: %s", codigo, exc)
+                failures.append(f"{codigo}: {type(exc).__name__}: {exc}")
+                continue
+            summary.resultado += result
+            summary.extraidos += extracted
+            summary.rechazados += rejected_count
+            if last is not None:
+                latest = max(latest or last, last)
+        if failures and len(failures) == len(settings.indicators):
+            raise RuntimeError("; ".join(failures))
+        if failures:
+            summary.estado = "parcial"
+            summary.error = "; ".join(failures)
+        # La marca de agua solo avanza si cargaron todos; si no, la próxima
+        # corrida vuelve a pedir el año completo de los que fallaron.
+        if latest is not None and not failures:
             set_watermark(
                 conn,
                 FUENTE_INDICADORES,
@@ -180,3 +202,31 @@ def run_indicadores(
             )
 
     return _tracked(conn, FUENTE_INDICADORES, body)
+
+
+def _load_indicator_years(
+    conn: psycopg.Connection,
+    client: httpx.Client,
+    *,
+    run_id: int,
+    codigo: str,
+    first_year: int,
+    last_year: int,
+    desde: date | None,
+) -> tuple[load.LoadResult, int, int, date | None]:
+    result = load.LoadResult()
+    extracted = rejected_count = 0
+    last: date | None = None
+    for year in range(first_year, last_year + 1):
+        payload = mindicador.fetch_year(client, codigo, year)
+        load.save_raw(conn, FUENTE_INDICADORES, f"{codigo}/{year}", payload)
+        indicador, values, rejected = mindicador.parse(payload)
+        if desde is not None:
+            values = [v for v in values if v.fecha >= desde]
+        extracted += len(values) + len(rejected)
+        rejected_count += len(rejected)
+        load.save_rejections(conn, run_id, FUENTE_INDICADORES, rejected)
+        result += load.load_indicador(conn, indicador, values)
+        if values:
+            last = max(last or values[-1].fecha, values[-1].fecha)
+    return result, extracted, rejected_count, last
