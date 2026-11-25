@@ -1,0 +1,38 @@
+# Levanta PostgreSQL, corre el pipeline una vez y abre el dashboard:
+#   docker compose up --build
+# Dashboard en http://localhost:8501
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: etl
+      POSTGRES_PASSWORD: etl
+      POSTGRES_DB: etl
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U etl -d etl"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  etl:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://etl:etl@db:5432/etl
+      ETL_FECHA_INICIO: ${ETL_FECHA_INICIO:-2025-01-01}
+    depends_on:
+      db: {condition: service_healthy}
+    command: ["ejecutar"]
+
+  dashboard:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://etl:etl@db:5432/etl
+    entrypoint: ["streamlit", "run", "dashboard/app.py", "--server.address=0.0.0.0", "--server.headless=true"]
+    ports: ["8501:8501"]
+    depends_on:
+      etl: {condition: service_completed_successfully}
+
+volumes:
+  pgdata:
