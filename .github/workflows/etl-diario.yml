@@ -1,0 +1,62 @@
+# Corre el pipeline todos los días contra las APIs reales.
+#
+# Sin configuración, carga los últimos 30 días en un PostgreSQL temporal: sirve
+# como prueba diaria de que las fuentes y el pipeline siguen funcionando.
+# Si defines el secreto DATABASE_URL (por ejemplo, una base gratuita en Neon o
+# Supabase), carga de forma incremental en esa base y el historial se conserva.
+name: ETL diario
+
+on:
+  schedule:
+    - cron: "30 11 * * *" # 08:30 en Chile (horario de verano)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  etl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: etl
+          POSTGRES_PASSWORD: etl
+          POSTGRES_DB: etl
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U etl" --health-interval 2s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://etl:etl@localhost:5432/etl' }}
+      BASE_PERSISTENTE: ${{ secrets.DATABASE_URL != '' }}
+      COLUMNS: "120"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked --no-dev
+      - name: Fecha de inicio (últimos 30 días si la base es temporal)
+        if: env.BASE_PERSISTENTE != 'true'
+        run: echo "ETL_FECHA_INICIO=$(date -u -d '30 days ago' +%F)" >> "$GITHUB_ENV"
+      - name: Ejecutar pipeline
+        run: uv run etl-chile ejecutar
+      - name: Resumen
+        if: always()
+        run: |
+          {
+            echo "## Resultado del ETL"
+            echo '```'
+            uv run etl-chile estado
+            echo '```'
+            echo "### Sismos por mes"
+            echo '```'
+            psql "$DATABASE_URL" -c "SELECT mes_inicio, cantidad, cantidad_m5_o_mas, magnitud_maxima FROM mart.sismos_mensuales ORDER BY mes_inicio DESC LIMIT 6"
+            echo '```'
+            echo "### Indicadores (últimos días)"
+            echo '```'
+            psql "$DATABASE_URL" -c "SELECT fecha, dolar, dolar_variacion_pct, euro, uf FROM mart.indicadores_diarios ORDER BY fecha DESC LIMIT 7"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
