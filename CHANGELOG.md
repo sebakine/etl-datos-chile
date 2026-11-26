@@ -8,6 +8,7 @@
 - Nuevo estado `parcial` en `etl.ejecuciones` (migración 003); en GitHub Actions se muestra como advertencia sin fallar la corrida.
 - Si una fuente falla por completo, el resumen ya no informa filas que se revirtieron.
 - Nuevo estado `no_disponible` (migración 004): si la API externa no responde en toda la corrida (caída, 5xx, timeouts), la ejecución no se marca como error; en GitHub Actions queda como advertencia y la próxima corrida recupera los datos. La corrida falla solo si ninguna fuente responde o si hay un error propio del pipeline.
+- mindicador.cl a veces responde 200 con el error en el cuerpo (`{"error": "500 Internal Server Error", ...}`): ahora se detecta, se reintenta y, si persiste, cuenta como fuente caída en vez de `KeyError`.
 
 ### Agregado
 

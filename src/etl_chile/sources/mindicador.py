@@ -26,8 +26,23 @@ BASE_URL = "https://mindicador.cl/api"
 SANTIAGO = ZoneInfo("America/Santiago")
 
 
-def fetch_year(client: httpx.Client, codigo: str, year: int) -> dict[str, Any]:
-    payload: dict[str, Any] = get_json(client, f"{BASE_URL}/{codigo}/{year}")
+def _error_en_cuerpo(payload: Any) -> str | None:
+    """mindicador.cl a veces responde 200 con ``{"error": ..., "message": ...}``."""
+    if not isinstance(payload, dict):
+        return "respuesta sin formato JSON de objeto"
+    if "error" in payload:
+        return str(payload.get("message") or payload["error"])
+    if "codigo" not in payload:
+        return "respuesta sin el campo 'codigo'"
+    return None
+
+
+def fetch_year(
+    client: httpx.Client, codigo: str, year: int, *, max_wait: float = 30.0
+) -> dict[str, Any]:
+    payload: dict[str, Any] = get_json(
+        client, f"{BASE_URL}/{codigo}/{year}", max_wait=max_wait, error_en_cuerpo=_error_en_cuerpo
+    )
     log.info("mindicador: %s %s con %s valores", codigo, year, len(payload.get("serie", [])))
     return payload
 

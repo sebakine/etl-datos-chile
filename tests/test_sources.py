@@ -3,13 +3,13 @@ from __future__ import annotations
 import itertools
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Any, ClassVar
 
 import httpx
 import pytest
 
 from etl_chile.config import BoundingBox
-from etl_chile.http import get_json, make_client
+from etl_chile.http import ErrorDeLaFuente, get_json, is_upstream_unavailable, make_client
 from etl_chile.sources import mindicador, usgs
 from tests.conftest import load_fixture
 
@@ -151,3 +151,37 @@ class TestHttp:
 
         with make_client(transport=httpx.MockTransport(handler)) as client:
             get_json(client, "https://x.test/")
+
+
+class TestErroresDisfrazados:
+    """mindicador.cl a veces responde 200 con el error en el cuerpo."""
+
+    ERROR: ClassVar[dict[str, Any]] = {
+        "error": "500 Internal Server Error",
+        "message": "cursor id 1 not found",
+        "description": None,
+    }
+
+    def test_reintenta_si_el_cuerpo_trae_un_error(self) -> None:
+        calls = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            if calls["n"] < 3:
+                return httpx.Response(200, json=self.ERROR)
+            return httpx.Response(200, json={"codigo": "uf", "serie": []})
+
+        with make_client(transport=httpx.MockTransport(handler)) as client:
+            assert mindicador.fetch_year(client, "uf", 2026, max_wait=0.01)["codigo"] == "uf"
+        assert calls["n"] == 3
+
+    def test_si_persiste_cuenta_como_fuente_caida(self) -> None:
+        with (
+            make_client(
+                transport=httpx.MockTransport(lambda r: httpx.Response(200, json=self.ERROR))
+            ) as client,
+            pytest.raises(ErrorDeLaFuente) as info,
+        ):
+            mindicador.fetch_year(client, "uf", 2026, max_wait=0.01)
+        assert is_upstream_unavailable(info.value)
+        assert "cursor id 1 not found" in str(info.value)

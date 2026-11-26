@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -21,9 +22,13 @@ log = logging.getLogger(__name__)
 USER_AGENT = f"etl-datos-chile/{__version__} (+https://github.com/sebakine/etl-datos-chile)"
 
 
+class ErrorDeLaFuente(Exception):
+    """La API respondió 200, pero con un error en el cuerpo (p. ej. un 500 interno)."""
+
+
 def is_upstream_unavailable(exc: BaseException) -> bool:
-    """La API externa no respondió (red, 429 o 5xx): no es un error del pipeline."""
-    if isinstance(exc, httpx.TransportError):
+    """La API externa no respondió (red, 429, 5xx o error en el cuerpo): no es culpa nuestra."""
+    if isinstance(exc, (httpx.TransportError, ErrorDeLaFuente)):
         return True
     if isinstance(exc, httpx.HTTPStatusError):
         return exc.response.status_code == 429 or exc.response.status_code >= 500
@@ -48,8 +53,13 @@ def get_json(
     *,
     attempts: int = 5,
     max_wait: float = 30.0,
+    error_en_cuerpo: Callable[[Any], str | None] | None = None,
 ) -> Any:
-    """GET que reintenta ante errores de red, 429 y 5xx, con espera exponencial."""
+    """GET que reintenta ante errores de red, 429 y 5xx, con espera exponencial.
+
+    ``error_en_cuerpo`` detecta respuestas 200 que en realidad traen un error;
+    esas también se reintentan y, si persisten, cuentan como fuente caída.
+    """
 
     @retry(
         retry=retry_if_exception(is_upstream_unavailable),
@@ -61,6 +71,9 @@ def get_json(
     def _do() -> Any:
         response = client.get(url, params=params)
         response.raise_for_status()
-        return response.json()
+        data = response.json()
+        if error_en_cuerpo is not None and (mensaje := error_en_cuerpo(data)):
+            raise ErrorDeLaFuente(f"{url}: {mensaje}")
+        return data
 
     return _do()
