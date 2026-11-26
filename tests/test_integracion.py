@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
@@ -197,4 +198,95 @@ def test_cli_fails_when_a_source_fails(
         lambda timeout: httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(400))),
     )
     result = CliRunner().invoke(cli.app, ["ejecutar", "--fuente", "sismos"])
+    assert result.exit_code == 1
+
+
+def caida_de(host: str, error: str = "503") -> Callable[[httpx.Request], httpx.Response]:
+    """Simula que una API externa no responde; el resto funciona normal."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == host:
+            if error == "red":
+                raise httpx.ConnectError("conexión reiniciada", request=request)
+            return httpx.Response(int(error))
+        return api_handler()(request)
+
+    return handler
+
+
+@pytest.mark.usefixtures("no_sleep")
+def test_indicadores_api_caida_queda_no_disponible(
+    conn: psycopg.Connection, settings: Settings
+) -> None:
+    with httpx.Client(transport=httpx.MockTransport(caida_de("mindicador.cl"))) as client:
+        summary = pipeline.run_indicadores(
+            conn, client, settings, desde=date(2025, 1, 1), today=date(2025, 1, 10)
+        )
+    assert summary.estado == "no_disponible"
+    assert summary.resultado.inserted == 0
+    assert "503" in (summary.error or "")
+    assert (
+        one(conn, "SELECT estado FROM etl.ejecuciones ORDER BY id DESC LIMIT 1") == "no_disponible"
+    )
+    # La marca de agua no avanza: la próxima corrida recupera lo que faltó.
+    assert one(conn, "SELECT count(*) FROM etl.marcas_de_agua WHERE fuente = 'mindicador'") == 0
+
+
+@pytest.mark.usefixtures("no_sleep")
+def test_sismos_api_caida_queda_no_disponible(conn: psycopg.Connection, settings: Settings) -> None:
+    with httpx.Client(
+        transport=httpx.MockTransport(caida_de("earthquake.usgs.gov", "red"))
+    ) as client:
+        summary = pipeline.run_sismos(conn, client, settings, desde=date(2026, 11, 1), now=NOW)
+    assert summary.estado == "no_disponible"
+    assert one(conn, "SELECT count(*) FROM warehouse.fact_sismo") == 0
+
+
+@pytest.mark.usefixtures("no_sleep")
+def test_error_propio_mezclado_con_caida_sigue_siendo_error(
+    conn: psycopg.Connection, settings: Settings
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.startswith("/api/uf/"):
+            return httpx.Response(404)  # error que no es una caída: hay que revisarlo
+        if request.url.host == "mindicador.cl":
+            return httpx.Response(503)
+        return api_handler()(request)
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        summary = pipeline.run_indicadores(
+            conn, client, settings, desde=date(2025, 1, 1), today=date(2025, 1, 10)
+        )
+    assert summary.estado == "error"
+
+
+@pytest.mark.usefixtures("no_sleep")
+def test_cli_tolera_una_fuente_caida(
+    conn: psycopg.Connection, monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", settings.database_url)
+    monkeypatch.setenv("ETL_INDICADORES", "dolar,uf")
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setattr(
+        cli,
+        "make_client",
+        lambda timeout: httpx.Client(transport=httpx.MockTransport(caida_de("mindicador.cl"))),
+    )
+    result = CliRunner().invoke(cli.app, ["ejecutar", "--desde", "2025-01-01"])
+    assert result.exit_code == 0, result.output
+    assert "::warning title=Fuente no disponible: mindicador::" in result.output
+
+
+@pytest.mark.usefixtures("no_sleep")
+def test_cli_falla_si_ninguna_fuente_responde(
+    conn: psycopg.Connection, monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", settings.database_url)
+    monkeypatch.setenv("ETL_INDICADORES", "dolar,uf")
+    monkeypatch.setattr(
+        cli,
+        "make_client",
+        lambda timeout: httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(503))),
+    )
+    result = CliRunner().invoke(cli.app, ["ejecutar", "--desde", "2025-01-01"])
     assert result.exit_code == 1

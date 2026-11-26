@@ -12,12 +12,17 @@ import psycopg
 
 from etl_chile import load
 from etl_chile.config import Settings
+from etl_chile.http import is_upstream_unavailable
 from etl_chile.sources import mindicador, usgs
 
 log = logging.getLogger(__name__)
 
 FUENTE_SISMOS = "usgs_sismos"
 FUENTE_INDICADORES = "mindicador"
+
+
+class FuenteNoDisponible(RuntimeError):
+    """La API externa no respondió durante toda la corrida (caída, 5xx, timeouts)."""
 
 
 @dataclass(slots=True)
@@ -87,10 +92,19 @@ def _tracked(
         with conn.transaction():
             body(summary)
     except Exception as exc:
-        summary.estado = "error"
-        summary.error = f"{type(exc).__name__}: {exc}"
         summary.resultado = load.LoadResult()  # la transacción se revirtió: nada quedó cargado
-        log.exception("falló la carga de %s", fuente)
+        if isinstance(exc, FuenteNoDisponible) or is_upstream_unavailable(exc):
+            # Caída de la API externa: no es un error del pipeline. Como la marca de
+            # agua no avanzó, la próxima corrida recupera lo que faltó.
+            summary.estado = "no_disponible"
+            summary.error = (
+                str(exc) if isinstance(exc, FuenteNoDisponible) else f"{type(exc).__name__}: {exc}"
+            )
+            log.warning("%s no está disponible: %s", fuente, summary.error)
+        else:
+            summary.estado = "error"
+            summary.error = f"{type(exc).__name__}: {exc}"
+            log.exception("falló la carga de %s", fuente)
     _finish_run(conn, summary)
     return summary
 
@@ -152,7 +166,8 @@ def run_indicadores(
 
     Cada indicador se carga en su propio savepoint: si mindicador.cl no responde
     para uno, los demás se guardan igual y la ejecución queda como ``parcial``.
-    Si fallan todos, queda como ``error``.
+    Si fallan todos porque la API no responde, queda como ``no_disponible``;
+    si alguno falla por otro motivo, queda como ``error``.
     """
     today = today or datetime.now(mindicador.SANTIAGO).date()
 
@@ -166,6 +181,7 @@ def run_indicadores(
             first_year = settings.start_date.year
         latest: date | None = None
         failures: list[str] = []
+        caidas = 0
         for codigo in settings.indicators:
             try:
                 with conn.transaction():
@@ -181,6 +197,7 @@ def run_indicadores(
             except Exception as exc:
                 log.warning("no se pudo cargar %s: %s", codigo, exc)
                 failures.append(f"{codigo}: {type(exc).__name__}: {exc}")
+                caidas += is_upstream_unavailable(exc)
                 continue
             summary.resultado += result
             summary.extraidos += extracted
@@ -188,6 +205,8 @@ def run_indicadores(
             if last is not None:
                 latest = max(latest or last, last)
         if failures and len(failures) == len(settings.indicators):
+            if caidas == len(failures):
+                raise FuenteNoDisponible("; ".join(failures))
             raise RuntimeError("; ".join(failures))
         if failures:
             summary.estado = "parcial"

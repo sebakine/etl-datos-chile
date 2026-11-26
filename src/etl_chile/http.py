@@ -21,7 +21,8 @@ log = logging.getLogger(__name__)
 USER_AGENT = f"etl-datos-chile/{__version__} (+https://github.com/sebakine/etl-datos-chile)"
 
 
-def _is_retryable(exc: BaseException) -> bool:
+def is_upstream_unavailable(exc: BaseException) -> bool:
+    """La API externa no respondió (red, 429 o 5xx): no es un error del pipeline."""
     if isinstance(exc, httpx.TransportError):
         return True
     if isinstance(exc, httpx.HTTPStatusError):
@@ -51,7 +52,7 @@ def get_json(
     """GET que reintenta ante errores de red, 429 y 5xx, con espera exponencial."""
 
     @retry(
-        retry=retry_if_exception(_is_retryable),
+        retry=retry_if_exception(is_upstream_unavailable),
         stop=stop_after_attempt(attempts),
         wait=wait_exponential(multiplier=min(1.0, max_wait), max=max_wait),
         before_sleep=before_sleep_log(log, logging.WARNING),

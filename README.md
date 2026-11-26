@@ -98,7 +98,7 @@ Vistas en el esquema `mart`: `sismos_mensuales`, `sismos_por_ciudad`, `indicador
 
 | Etapa | Qué hace | Por qué |
 | --- | --- | --- |
-| Extracción | Pide los sismos en ventanas de un mes y los indicadores por año, con reintentos exponenciales ante errores de red, 429 y 5xx | Las APIs públicas fallan; USGS limita a 20.000 eventos por consulta |
+| Extracción | Pide los sismos en ventanas de un mes y los indicadores por año, con reintentos exponenciales ante errores de red, 429 y 5xx. Si la API sigue caída, la fuente queda como `no_disponible` y se recupera en la corrida siguiente | Las APIs públicas fallan; USGS limita a 20.000 eventos por consulta |
 | Aterrizaje | Guarda cada respuesta completa en `raw.respuestas_api` (JSONB) | Permite auditar y reprocesar sin volver a llamar a la API |
 | Validación | Cada registro pasa por un modelo `pydantic` (rangos, fechas futuras, zona horaria) | Un registro malo va a `etl.rechazos` con el motivo y no detiene el pipeline |
 | Carga | `COPY` a tablas temporales y luego `INSERT ... ON CONFLICT DO UPDATE ... WHERE` | Idempotente; solo actualiza si USGS revisó el sismo o si cambió un valor |

@@ -76,3 +76,9 @@ def conn() -> Iterator[psycopg.Connection]:
     with db.connect(url) as connection:
         db.migrate(connection)
         yield connection
+
+
+@pytest.fixture
+def no_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Los reintentos no esperan de verdad en los tests."""
+    monkeypatch.setattr("tenacity.nap.time.sleep", lambda _seconds: None)

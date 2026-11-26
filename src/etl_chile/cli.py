@@ -94,7 +94,7 @@ def ejecutar(
     table = Table(title="Ejecución", title_justify="left")
     for col in ("Fuente", "Estado", "Extraídos", "Insertados", "Actualizados", "Rechazados"):
         table.add_column(col, justify="left" if col in {"Fuente", "Estado"} else "right")
-    colors = {"ok": "green", "parcial": "yellow", "error": "red"}
+    colors = {"ok": "green", "parcial": "yellow", "no_disponible": "yellow", "error": "red"}
     for s in summaries:
         estado = f"[{colors.get(s.estado, 'red')}]{s.estado}[/]" + (
             f" {s.error}" if s.error else ""
@@ -106,13 +106,17 @@ def ejecutar(
     console.print(table)
     _print_checks(results)
 
+    titulos = {"parcial": "Carga parcial de {}", "no_disponible": "Fuente no disponible: {}"}
     for s in summaries:
-        if s.estado == "parcial" and os.environ.get("GITHUB_ACTIONS") == "true":
+        if s.estado in titulos and os.environ.get("GITHUB_ACTIONS") == "true":
             # Anotación visible en GitHub Actions sin marcar la corrida como fallida.
             mensaje = (s.error or "").replace("\n", " ")
-            typer.echo(f"::warning title=Carga parcial de {s.fuente}::{mensaje}")
+            typer.echo(f"::warning title={titulos[s.estado].format(s.fuente)}::{mensaje}")
     failed_critical = [r for r in results if not r.ok and r.check.severidad == "critico"]
-    if any(s.estado == "error" for s in summaries) or failed_critical:
+    # Una API externa caída no es un fallo del pipeline, salvo que no responda ninguna:
+    # entonces no se procesó nada y conviene enterarse.
+    todas_caidas = bool(summaries) and all(s.estado == "no_disponible" for s in summaries)
+    if any(s.estado == "error" for s in summaries) or failed_critical or todas_caidas:
         raise typer.Exit(1)
 
 

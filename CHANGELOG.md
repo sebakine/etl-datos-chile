@@ -7,6 +7,7 @@
 - Cada indicador se carga en su propio savepoint: si mindicador.cl falla para uno, los demás se guardan igual.
 - Nuevo estado `parcial` en `etl.ejecuciones` (migración 003); en GitHub Actions se muestra como advertencia sin fallar la corrida.
 - Si una fuente falla por completo, el resumen ya no informa filas que se revirtieron.
+- Nuevo estado `no_disponible` (migración 004): si la API externa no responde en toda la corrida (caída, 5xx, timeouts), la ejecución no se marca como error; en GitHub Actions queda como advertencia y la próxima corrida recupera los datos. La corrida falla solo si ninguna fuente responde o si hay un error propio del pipeline.
 
 ### Agregado
 
